@@ -1,0 +1,7 @@
+salescheduler.org {
+	reverse_proxy web:3000
+}
+
+aegiscan.xyz, www.aegiscan.xyz {
+	reverse_proxy 172.18.0.1:3000
+}
