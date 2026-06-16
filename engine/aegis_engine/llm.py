@@ -28,14 +28,23 @@ SLITHER:
 
 
 class GeminiClient:
-    def __init__(self):
-        import google.generativeai as genai
+    """Gemini via Vertex AI, authenticated with Application Default Credentials (ADC).
 
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        self._m = genai.GenerativeModel("gemini-2.0-flash")
+    No API key in code: ADC is picked up from the environment (set up via
+    `gcloud auth application-default login`). Reads the GCP project/location from env.
+    """
+
+    def __init__(self):
+        from google import genai
+
+        project = os.environ["GOOGLE_CLOUD_PROJECT"]
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+        self._client = genai.Client(vertexai=True, project=project, location=location)
+        self._model = os.environ.get("AEGIS_LLM_MODEL", "gemini-2.0-flash")
 
     def generate(self, prompt: str) -> str:
-        return self._m.generate_content(prompt).text
+        resp = self._client.models.generate_content(model=self._model, contents=prompt)
+        return resp.text
 
 
 def _strip_json(text: str) -> dict:
