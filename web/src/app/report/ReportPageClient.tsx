@@ -20,28 +20,29 @@ const SAMPLE_REPORT: Report = {
   reason: null,
   risk_score: 100,
   summary:
-    "One critical reentrancy issue found in withdraw(). Funds can be drained via recursive calls before the balance is zeroed.",
+    "The withdraw function sends funds before it sets the balance to zero. A malicious contract can call back into withdraw and drain the vault.",
   findings: [
     {
       id: "F-1",
       severity: "critical",
-      title: "Reentrancy in withdraw()",
+      title: "Reentrancy in the withdraw function",
       location: "VulnerableVault.sol:8",
       source: "slither:reentrancy-eth",
       description:
-        "External call msg.sender.call{value: bal} executes before balances[msg.sender] is set to 0, allowing a malicious contract to re-enter withdraw() and drain funds.",
+        "The external call sends funds before the balance is set to zero, so an attacker contract can call back into the withdraw function and drain the vault.",
       recommendation:
-        "Apply checks-effects-interactions: set balances[msg.sender] = 0 BEFORE the external call, or use a reentrancy guard (OpenZeppelin ReentrancyGuard).",
+        "Set the balance to zero before the external call, or use a reentrancy guard such as the OpenZeppelin ReentrancyGuard.",
     },
     {
       id: "F-2",
       severity: "low",
-      title: "Unchecked low-level call",
+      title: "Unchecked low level call",
       location: "VulnerableVault.sol:8",
       source: "slither:low-level-calls",
-      description: "Low-level call return value handling.",
+      description:
+        "The return value of the low level call is not checked, so a failed transfer can pass silently.",
       recommendation:
-        "Prefer transfer patterns or validate the success boolean explicitly.",
+        "Check the success value and revert on failure, or use a safer transfer method.",
     },
   ],
   confidence: "high",

@@ -20,6 +20,12 @@ return STRICT JSON: {{"summary": str, "findings": [{{"severity": one of critical
 "description": str, "recommendation": str}}]}}.
 RULES: every finding MUST have a concrete location "File.sol:LINE". Do NOT invent issues without a line.
 Merge/dedupe slither findings; you may add real logic bugs slither missed.
+STYLE: write summary, title, description and recommendation as plain direct English a non expert can read.
+Do NOT use em dashes, en dashes or hyphens. Do NOT use parentheses or any bracketed aside.
+Do NOT put "()" after a function name; write the bare name. Avoid hyphenated jargon such as
+"checks-effects-interactions"; say it in plain words instead, for example "set the balance to zero before
+the external call". Keep sentences short. The location and source fields are the only place identifiers
+may appear, do not restyle them.
 SOURCE:
 {source}
 SLITHER:
