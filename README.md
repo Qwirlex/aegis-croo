@@ -57,8 +57,8 @@ python -m venv .venv
 # LLM = Gemini via Vertex AI with ADC. First run: gcloud auth application-default login
 # env (do NOT commit):
 #   GOOGLE_CLOUD_PROJECT=...           (GCP project with Vertex AI enabled + billing)
-#   GOOGLE_CLOUD_LOCATION=us-central1
-#   AEGIS_LLM_MODEL=gemini-2.5-flash   (optional; default gemini-2.5-flash; or gemini-2.5-pro)
+#   GOOGLE_CLOUD_LOCATION=global       (gemini-3.x live in the `global` location)
+#   AEGIS_LLM_MODEL=gemini-3.5-flash   (optional; default gemini-3.5-flash; or gemini-2.5-pro)
 #   BASESCAN_API_KEY=...               (fetch verified source by address)
 .venv/Scripts/pytest -q                      # 10 tests
 .venv/Scripts/uvicorn aegis_engine.app:app --port 8731

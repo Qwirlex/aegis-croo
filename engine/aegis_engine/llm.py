@@ -38,9 +38,9 @@ class GeminiClient:
         from google import genai
 
         project = os.environ["GOOGLE_CLOUD_PROJECT"]
-        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
         self._client = genai.Client(vertexai=True, project=project, location=location)
-        self._model = os.environ.get("AEGIS_LLM_MODEL", "gemini-2.5-flash")
+        self._model = os.environ.get("AEGIS_LLM_MODEL", "gemini-3.5-flash")
 
     def generate(self, prompt: str) -> str:
         resp = self._client.models.generate_content(model=self._model, contents=prompt)
