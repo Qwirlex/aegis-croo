@@ -1,0 +1,19 @@
+# secrets / env
+.env
+.env.*
+*.key
+# python
+engine/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# node
+node_modules/
+provider/dist/
+# next
+web/.next/
+web/out/
+# slither/foundry artifacts
+crytic-export/
+out/
+cache/
