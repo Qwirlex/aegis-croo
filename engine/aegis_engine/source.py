@@ -13,8 +13,11 @@ class ResolvedSource:
 
 def _basescan_fetch(address: str) -> dict:
     key = os.environ["BASESCAN_API_KEY"]
-    url = "https://api.basescan.org/api"
+    # Etherscan V2 unified API: one key works across chains, Base is chainid 8453.
+    # The old api.basescan.org v1 path now rejects calls that omit chainid.
+    url = "https://api.etherscan.io/v2/api"
     params = {
+        "chainid": "8453",
         "module": "contract",
         "action": "getsourcecode",
         "address": address,
@@ -22,10 +25,15 @@ def _basescan_fetch(address: str) -> dict:
     }
     r = httpx.get(url, params=params, timeout=30)
     r.raise_for_status()
-    result = r.json()["result"][0]
-    if not result.get("SourceCode"):
+    payload = r.json()
+    result = payload.get("result")
+    # On error Etherscan returns status "0" and a string result, e.g. "Invalid API Key".
+    if payload.get("status") != "1" or not isinstance(result, list) or not result:
+        raise ValueError(f"Basescan lookup failed: {payload.get('message')}: {result}")
+    entry = result[0]
+    if not entry.get("SourceCode"):
         raise ValueError("no verified source on Basescan")
-    return result
+    return entry
 
 
 def resolve_source(
