@@ -7,6 +7,7 @@ import {
 } from "@croo-network/sdk";
 import type { Event } from "@croo-network/sdk";
 import { runAudit } from "./engine";
+import { buildDeliverable } from "./report-link";
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -137,7 +138,7 @@ async function handleOrderPaid(e: Event): Promise<void> {
   let deliverableText: string;
   try {
     const report = await runAudit(ENGINE_URL, auditInput);
-    deliverableText = JSON.stringify(report);
+    deliverableText = buildDeliverable(report);
     console.log(
       `[aegis] Audit complete  order_id=${orderId}  risk_score=${report.risk_score ?? "?"}`
     );

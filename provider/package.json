@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ts-node src/listener.ts",
     "build": "tsc",
-    "test": "node --require ts-node/register --test src/engine.test.ts"
+    "test": "node --require ts-node/register --test src/engine.test.ts src/report-link.test.ts"
   },
   "keywords": [],
   "author": "",
