@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --surface: #161b22;
+  --border: #30363d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Risk gauge styles */
+.risk-gauge-wrap {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.risk-gauge-wrap svg {
+  transform: rotate(-90deg);
+}
+
+.risk-gauge-track {
+  fill: none;
+  stroke: #30363d;
+  stroke-width: 10;
+}
+
+.risk-gauge-fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
