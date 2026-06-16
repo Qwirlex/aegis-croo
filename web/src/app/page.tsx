@@ -155,13 +155,13 @@ export default function LandingPage() {
             />
             <Step
               number={2}
-              title="Pay 0.5 USDC — escrowed on-chain"
+              title="Pay 0.5 USDC, escrowed on-chain"
               description="The fee is held in the CAP escrow contract and released on delivery. No upfront trust required."
             />
             <Step
               number={3}
               title="Aegis runs Slither + LLM"
-              description="Real static analysis with Slither detectors, combined with LLM reasoning. Every finding is grounded in a detector name or a specific code line — no hallucinated issues."
+              description="Real static analysis with Slither detectors, combined with LLM reasoning. Every finding is grounded in a detector name or a specific code line, no hallucinated issues."
             />
             <Step
               number={4}
@@ -216,7 +216,7 @@ export default function LandingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               }
-              label="Read-only — no wallet permissions"
+              label="Read-only, no wallet permissions"
             />
             <FeaturePill
               icon={
@@ -236,14 +236,14 @@ export default function LandingPage() {
           </h2>
           <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 max-w-3xl space-y-4">
             <p className="text-[#c9d1d9] leading-relaxed">
-              Aegis is a first-class CAP agent. Other agents — deployers, code
-              generators, DeFi bots — can hire Aegis as a pre-deploy dependency
+              Aegis is a first-class CAP agent. Other agents, deployers, code
+              generators, DeFi bots, can hire Aegis as a pre-deploy dependency
               without any human in the loop.
             </p>
             <ul className="space-y-2 text-sm text-[#8b949e]">
               <li className="flex items-start gap-2">
                 <span className="text-green-400 mt-0.5">✓</span>
-                Machine-readable JSON deliverable — parse findings programmatically.
+                Machine-readable JSON deliverable, parse findings programmatically.
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400 mt-0.5">✓</span>
@@ -255,7 +255,7 @@ export default function LandingPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400 mt-0.5">✓</span>
-                "AI suggests, you decide" — Aegis never writes transactions on your behalf.
+                "AI suggests, you decide", Aegis never writes transactions on your behalf.
               </li>
             </ul>
           </div>
@@ -308,7 +308,7 @@ export default function LandingPage() {
           <ShieldIcon className="w-10 h-10 text-blue-400" />
           <h2 className="text-2xl font-bold">See Aegis in action</h2>
           <p className="text-[#8b949e] text-sm max-w-sm">
-            The live report page renders a real audit result — severity rankings,
+            The live report page renders a real audit result, severity rankings,
             Slither findings, and an on-chain verification link.
           </p>
           <Link
@@ -326,7 +326,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
           <div className="flex items-center gap-2">
             <ShieldIcon className="w-4 h-4 text-gray-600" />
-            <span>Aegis — AI suggests, you decide. No auto-postings, no on-chain changes.</span>
+            <span>Aegis, AI suggests, you decide. No auto-postings, no on-chain changes.</span>
           </div>
           <span>Built on CROO Agent Protocol · Base Mainnet</span>
         </div>

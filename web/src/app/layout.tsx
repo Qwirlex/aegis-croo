@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aegis — Smart Contract Security Audit",
+  title: "Aegis, Smart Contract Security Audit",
   description: "AI-powered smart contract vulnerability detector",
 };
 

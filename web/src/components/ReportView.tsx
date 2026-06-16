@@ -306,7 +306,7 @@ export default function ReportView({ report, txHash }: ReportViewProps) {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Verified on-chain — {txHash.slice(0, 10)}…
+                    Verified on-chain, {txHash.slice(0, 10)}…
                   </a>
                 </div>
               )}
@@ -360,7 +360,7 @@ export default function ReportView({ report, txHash }: ReportViewProps) {
 
             {sorted.length === 0 ? (
               <div className="bg-green-900/20 border border-green-800 rounded-xl p-6 text-center">
-                <p className="text-green-400 font-semibold">No findings — clean audit</p>
+                <p className="text-green-400 font-semibold">No findings, clean audit</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -375,7 +375,7 @@ export default function ReportView({ report, txHash }: ReportViewProps) {
 
       {/* Footer */}
       <footer className="border-t border-[#21262d] mt-12 py-6 text-center text-xs text-gray-600">
-        Aegis — AI suggests, you decide. No auto-postings, no on-chain changes.
+        Aegis, AI suggests, you decide. No auto-postings, no on-chain changes.
       </footer>
     </div>
   );
