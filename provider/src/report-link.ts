@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = process.env.REPORT_BASE_URL ?? "https://aegisscan.xyz";
+const DEFAULT_BASE_URL = process.env.REPORT_BASE_URL ?? "https://aegiscan.xyz";
 
 /** Stateless link to the hosted /report viewer: ?data=<percent-encoded base64(report)>. */
 export function reportUrl(report: unknown, baseUrl: string = DEFAULT_BASE_URL): string {

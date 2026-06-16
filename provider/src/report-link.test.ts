@@ -11,21 +11,21 @@ const REPORT = {
 };
 
 test("reportUrl yields a ?data= link that round-trips to the report", () => {
-  const url = reportUrl(REPORT, "https://aegisscan.xyz");
-  assert.ok(url.startsWith("https://aegisscan.xyz/report?data="));
+  const url = reportUrl(REPORT, "https://aegiscan.xyz");
+  assert.ok(url.startsWith("https://aegiscan.xyz/report?data="));
   const data = decodeURIComponent(url.split("data=")[1]);
   const json = Buffer.from(data, "base64").toString("utf8");
   assert.deepEqual(JSON.parse(json), REPORT);
 });
 
 test("reportUrl percent-encodes base64 so + and / survive URLSearchParams", () => {
-  const url = reportUrl(REPORT, "https://aegisscan.xyz");
+  const url = reportUrl(REPORT, "https://aegiscan.xyz");
   const raw = url.split("data=")[1];
   assert.ok(!raw.includes("+") && !raw.includes("/"), "must be percent-encoded");
 });
 
 test("buildDeliverable contains the link and the raw JSON", () => {
-  const text = buildDeliverable(REPORT, "https://aegisscan.xyz");
-  assert.ok(text.includes("https://aegisscan.xyz/report?data="));
+  const text = buildDeliverable(REPORT, "https://aegiscan.xyz");
+  assert.ok(text.includes("https://aegiscan.xyz/report?data="));
   assert.ok(text.includes('"agent":"Aegis"') || text.includes('"agent": "Aegis"'));
 });
