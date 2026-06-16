@@ -1,7 +1,7 @@
 # Aegis — On-chain Smart-Contract Auditor Agent (CROO)
 
 Aegis is a **paid, callable smart-contract security auditor agent** on the CROO Agent Protocol (CAP).
-Send it a contract — a Base address with verified source, or pasted Solidity — pay **2 USDC**, and Aegis
+Send it a contract — a Base address with verified source, or pasted Solidity — pay **0.5 USDC**, and Aegis
 returns a severity-ranked, source-cited audit report from a **hybrid Slither + LLM** engine. The report's
 hash is committed on-chain by CAP, giving a verifiable proof of audit. Built for **A2A composability**:
 other agents can hire Aegis as a pre-deploy dependency.
@@ -95,7 +95,7 @@ npm run build               # production build
 
 ## Go-live checklist (to ship the agent)
 1. Register agent "Aegis" at https://agent.croo.network -> copy API key into `provider/.env` (`CROO_SDK_KEY`).
-2. Add service "Smart Contract Audit": price 2 USDC, SLA 0h30m, deliverable Schema/Text, requirements Text.
+2. Add service "Smart Contract Audit": price 0.5 USDC, SLA 0h30m, deliverable Schema/Text, requirements Text.
 3. Fund the agent's AA wallet with a few USDC on Base (for testing the requester side).
 4. Run engine (`uvicorn ... :8731`) + provider (`npm run dev`) — agent shows "Online".
 5. Place a test order (requester agent) with `engine/tests/fixtures/VulnerableVault.sol`; confirm the

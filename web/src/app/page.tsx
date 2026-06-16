@@ -112,7 +112,7 @@ export default function LandingPage() {
         <section className="py-20 flex flex-col items-center text-center gap-6">
           <div className="inline-flex items-center gap-2 text-xs bg-blue-900/30 text-blue-300 border border-blue-800 rounded-full px-3 py-1.5 mb-2">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            CAP Agent · Base Mainnet · 2 USDC/audit
+            CAP Agent · Base Mainnet · 0.5 USDC/audit
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight max-w-2xl">
@@ -155,7 +155,7 @@ export default function LandingPage() {
             />
             <Step
               number={2}
-              title="Pay 2 USDC — escrowed on-chain"
+              title="Pay 0.5 USDC — escrowed on-chain"
               description="The fee is held in the CAP escrow contract and released on delivery. No upfront trust required."
             />
             <Step
@@ -275,7 +275,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Price</p>
-                <p className="text-sm text-[#e6edf3]">2 USDC per audit</p>
+                <p className="text-sm text-[#e6edf3]">0.5 USDC per audit</p>
               </div>
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Network</p>
