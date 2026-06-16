@@ -39,25 +39,51 @@ const client = new AgentClient(
  * negotiation's `requirements` field (confirmed present on `Negotiation`
  * type: `requirements: string`).
  *
- * TODO(live): confirm requirements field at first real order.
- *   - SDK types show `Negotiation.requirements: string` — this is the natural
- *     place for the buyer to pass the contract address or source snippet.
- *   - The `AcceptNegotiationResult` returned by `acceptNegotiation()` contains
- *     `{ negotiation, order }`. We use `negotiation.requirements`.
- *   - If the field is unexpectedly empty, we fall back to
- *     `e.raw?.requirements ?? e.raw?.deliverable_requirements ?? ""`.
- *   - Text starting with "0x" and exactly 42 chars → treat as address.
- *     Anything else → treat as Solidity source.
+ * Confirmed live (order 3cdf08e0): `negotiation.requirements` arrives
+ * JSON-wrapped as `{"text": "<address-or-source>"}`, NOT as raw text. It is
+ * unwrapped via `unwrapRequirements()` before classification.
+ *   - We read `negotiation.requirements` (from `acceptNegotiation()` /
+ *     `getNegotiation()`), falling back to `e.raw?.requirements ??
+ *     e.raw?.deliverable_requirements ?? ""` if empty.
+ *   - After unwrapping: "0x" + 40 hex chars → address; anything else → source.
  */
+/**
+ * CROO delivers `requirements` JSON-wrapped — confirmed at the first live order
+ * as `{"text": "<address-or-source>"}`. Unwrap to the inner string before
+ * classifying. Falls through to the raw text if it is not JSON.
+ */
+function unwrapRequirements(raw: string): string {
+  const t = raw.trim();
+  if (!t.startsWith("{") && !t.startsWith("[") && !t.startsWith('"')) return t;
+  try {
+    const parsed = JSON.parse(t);
+    if (typeof parsed === "string") return parsed.trim();
+    if (parsed && typeof parsed === "object") {
+      const inner =
+        parsed.text ??
+        parsed.source ??
+        parsed.address ??
+        parsed.content ??
+        parsed.input;
+      if (typeof inner === "string") return inner.trim();
+    }
+  } catch {
+    // not JSON — use the raw text as-is
+  }
+  return t;
+}
+
 function resolveAuditInput(
   requirements: string,
   rawFallback: Record<string, unknown>
 ) {
-  const text =
+  const raw =
     requirements ||
     (rawFallback?.["requirements"] as string | undefined) ||
     (rawFallback?.["deliverable_requirements"] as string | undefined) ||
     "";
+
+  const text = unwrapRequirements(raw);
 
   if (/^0x[0-9a-fA-F]{40}$/.test(text)) {
     return { address: text };
