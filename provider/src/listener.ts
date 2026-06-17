@@ -138,7 +138,7 @@ async function handleOrderPaid(e: Event): Promise<void> {
   let deliverableText: string;
   try {
     const report = await runAudit(ENGINE_URL, auditInput);
-    deliverableText = buildDeliverable(report);
+    deliverableText = await buildDeliverable(report);
     console.log(
       `[aegis] Audit complete  order_id=${orderId}  risk_score=${report.risk_score ?? "?"}`
     );

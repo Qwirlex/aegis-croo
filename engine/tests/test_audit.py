@@ -3,7 +3,7 @@ from aegis_engine.llm import ReasonResult
 from aegis_engine.models import Finding
 
 
-def fake_slither(source, solc_version="0.8.25"):
+def fake_slither(source, solc_version="0.8.25", address=None):
     return [{"check": "reentrancy-eth", "impact": "High", "description": "d", "line": 8}]
 
 
@@ -38,7 +38,7 @@ def test_audit_ok_path():
 
 
 def test_audit_cannot_analyze_on_compile_error():
-    def boom(source, solc_version="0.8.25"):
+    def boom(source, solc_version="0.8.25", address=None):
         raise RuntimeError("no compile")
 
     r = audit(

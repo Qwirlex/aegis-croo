@@ -1,8 +1,11 @@
+import json
 import pathlib
 import pytest
 from aegis_engine.static_analysis import (
     run_slither,
     resolve_solc_version,
+    flatten_source,
+    _to_standard_json,
     SlitherCompileError,
 )
 
@@ -34,3 +37,53 @@ def test_slither_raises_on_compile_failure():
     # a source that cannot compile must raise, not return [] (which would look clean)
     with pytest.raises(SlitherCompileError):
         run_slither("this is not valid solidity at all", solc_version="0.8.25")
+
+
+# ---------------------------------------------------------------------------
+# Etherscan multi-file / standard-json source handling
+# ---------------------------------------------------------------------------
+
+def test_plain_source_is_not_standard_json():
+    assert _to_standard_json("pragma solidity ^0.8.0;\ncontract C{}") is None
+
+
+def test_double_wrapped_standard_json_is_unwrapped():
+    # Basescan double-wraps standard-json input in an extra pair of braces.
+    blob = "{{" + json.dumps({
+        "language": "Solidity",
+        "sources": {"A.sol": {"content": "contract A{}"}},
+        "settings": {"optimizer": {"enabled": True, "runs": 200}},
+    })[1:-1] + "}}"
+    std = _to_standard_json(blob)
+    assert std is not None
+    assert std["language"] == "Solidity"
+    assert "A.sol" in std["sources"]
+    # optimizer settings are preserved, outputSelection is forced to include the AST
+    assert std["settings"]["optimizer"]["runs"] == 200
+    assert std["settings"]["outputSelection"]["*"][""] == ["ast"]
+
+
+def test_legacy_multifile_map_is_wrapped_as_standard_json():
+    blob = json.dumps({
+        "contracts/A.sol": {"content": "contract A{}"},
+        "contracts/B.sol": {"content": "contract B{}"},
+    })
+    std = _to_standard_json(blob)
+    assert std is not None
+    assert set(std["sources"]) == {"contracts/A.sol", "contracts/B.sol"}
+
+
+def test_flatten_source_concatenates_multifile():
+    blob = json.dumps({
+        "A.sol": {"content": "contract A{}"},
+        "B.sol": {"content": "contract B{}"},
+    })
+    flat = flatten_source(blob)
+    assert "// File: A.sol" in flat
+    assert "contract A{}" in flat
+    assert "contract B{}" in flat
+
+
+def test_flatten_source_passthrough_for_plain():
+    src = "pragma solidity ^0.8.0;\ncontract C{}"
+    assert flatten_source(src) == src

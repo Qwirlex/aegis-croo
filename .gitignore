@@ -14,6 +14,9 @@ provider/dist/
 # next
 web/.next/
 web/out/
+# stored short-link reports
+web/.reports/
+.reports/
 # slither/foundry artifacts
 crytic-export/
 out/
