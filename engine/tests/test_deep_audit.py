@@ -138,8 +138,11 @@ def test_a_report_with_no_findings_at_all_still_scores_and_reads_ok():
                 return json.dumps({"verdict": "refuted", "reason": "r"})
             return json.dumps({"findings": []})
 
-    r = run_deep_audit(_prepared(hits=[]), llm=Llm(), summarize=lambda **kw: "nothing found",
-                       signing_key="")
+    # A contract with nothing gated, so there is no privileged power to report
+    # either. With an owner only function the report would rightly not be empty.
+    plain = "contract Plain { function ping() external view returns (uint256) { return 1; } }"
+    r = run_deep_audit(_prepared(source=plain, hits=[]), llm=Llm(),
+                       summarize=lambda **kw: "nothing found", signing_key="")
     assert r.findings == []
     assert r.risk_score == 0
     assert r.verdict == "looks_ok"
@@ -236,3 +239,54 @@ def test_trimming_is_recorded_in_the_coverage_so_it_is_not_hidden():
     r = run_deep_audit(_prepared(hits=noisy), llm=llm, summarize=lambda **kw: "s", signing_key="")
     assert all("node_modules" not in f.location for f in r.findings)
     assert any("informational notes were left out" in n for n in r.coverage.not_checked)
+
+
+from aegis_engine.deep_audit import powers_as_findings
+
+
+def test_privileged_powers_become_findings_worded_the_same_every_time():
+    inv = {"privileged_powers": [
+        {"function": "mint", "file": "A.sol", "line": 7, "visibility": "external",
+         "modifiers": ["onlyOwner"], "capability": "mint new supply", "can_move_funds": True,
+         "confidence": "high"},
+        {"function": "setFee", "file": "A.sol", "line": 9, "visibility": "external",
+         "modifiers": ["onlyOwner"], "capability": "change fees", "can_move_funds": False,
+         "confidence": "medium"},
+    ]}
+    out = powers_as_findings(inv)
+    assert len(out) == 1                       # only the one that touches funds
+    f = out[0]
+    assert f["severity"] == "high"
+    assert f["location"] == "A.sol:7"
+    assert "mint" in f["title"]
+    assert f["refutation"]["verdict"] == "not_checked"
+    assert powers_as_findings(inv) == out      # identical on a second call
+
+
+def test_a_power_finding_is_not_sent_to_the_skeptic():
+    class Llm:
+        def generate(self, _):
+            raise AssertionError("a fact read from the code must not be challenged")
+
+    from aegis_engine.refute import refute_findings
+    power = powers_as_findings({"privileged_powers": [
+        {"function": "sweep", "file": "A.sol", "line": 4, "visibility": "external",
+         "modifiers": ["onlyOwner"], "capability": "move funds out", "can_move_funds": True,
+         "confidence": "high"}]})
+    kept = refute_findings(power, files={"A.sol": "x\n" * 10}, llm=Llm())
+    assert kept[0]["severity"] == "high"
+    assert kept[0]["refutation"]["verdict"] == "not_checked"
+
+
+def test_the_owner_power_headline_survives_a_model_that_finds_nothing():
+    class QuietLlm:
+        def generate(self, prompt):
+            if "REFUTE" in prompt:
+                return json.dumps({"verdict": "refuted", "reason": "r"})
+            return json.dumps({"findings": []})
+
+    r = run_deep_audit(_prepared(hits=[]), llm=QuietLlm(), summarize=lambda **kw: "s",
+                       signing_key="")
+    titles = [f.title for f in r.findings]
+    assert any("mint new supply" in t for t in titles)
+    assert r.verdict in ("high_risk", "critical_risk")

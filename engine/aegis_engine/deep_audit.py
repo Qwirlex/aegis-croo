@@ -62,6 +62,65 @@ def trim_noise(findings: list[dict]) -> tuple[list[dict], int]:
     return kept, dropped
 
 
+# Capabilities that are serious enough to name as a finding on their own, not
+# just a row in the powers table.
+_HIGH_CAPABILITIES = {
+    "mint new supply",
+    "move funds out",
+    "replace the code",
+    "block specific holders",
+    "burn balances",
+}
+
+
+def powers_as_findings(inventory: dict) -> list[dict]:
+    """Turn the privileged powers we parsed into findings, deterministically.
+
+    Two runs of the same contract used to disagree about whether the headline
+    was an unbounded mint or an arbitrary burn, because both were left to a
+    model that sees one or the other. The powers themselves are read straight
+    out of the code, so they belong in the report every time, worded the same
+    way, and they carry their own refutation verdict since a function that
+    exists is a fact and not a claim to argue about.
+    """
+    out: list[dict] = []
+    for p in inventory.get("privileged_powers", []):
+        if not p.get("can_move_funds"):
+            continue
+        capability = p.get("capability", "")
+        severity = "high" if capability in _HIGH_CAPABILITIES else "medium"
+        name = p["function"]
+        gates = ", ".join(p.get("modifiers", [])) or "a caller check"
+        out.append({
+            "severity": severity,
+            "title": f"A privileged caller can {capability} through {name}",
+            "location": f"{p['file']}:{p['line']}",
+            "category": "privileged_power",
+            "description": (
+                f"The function {name} is limited to a privileged caller by {gates}, "
+                f"and it can {capability}."
+            ),
+            "impact": (
+                "Whoever holds that key can do this at any time without asking a holder, "
+                "so the safety of your funds rests on that key and on the people who control it."
+            ),
+            "exploit_scenario": (
+                f"The key holder calls {name}. Nothing in the contract stops it, and no delay "
+                "gives anyone time to react."
+            ),
+            "recommendation": (
+                "Put the function behind a timelock or a multi signature, cap what it can do, "
+                "or remove it once it is no longer needed."
+            ),
+            "provenance": ["inventory:privileged_power"],
+            "refutation": {
+                "verdict": "not_checked",
+                "reason": "read directly from the code, this is a fact about the contract",
+            },
+        })
+    return out
+
+
 NOT_CHECKED = [
     "runtime behaviour, nothing was executed or simulated",
     "formal invariants and property proofs",
@@ -204,7 +263,11 @@ def run_deep_audit(prepared: Prepared, *, llm=None, summarize=None,
 
     lens_run = run_lenses(lenses=lenses, source=prepared.flat,
                           inventory=prepared.inventory, slither=prepared.slither, llm=llm)
-    candidates = merge_findings(lens_run.findings + slither_as_findings(prepared.slither))
+    candidates = merge_findings(
+        lens_run.findings
+        + slither_as_findings(prepared.slither)
+        + powers_as_findings(prepared.inventory)
+    )
     before = len([f for f in candidates if f.get("severity") != "info"])
     kept = refute_findings(candidates, files=prepared.files, llm=llm)
     # Ids are stamped once, here, after the set is final. merge_findings does not
@@ -265,7 +328,7 @@ def run_quick_scan(prepared: Prepared, *, llm=None, signing_key: str | None = No
         summary = "The reasoning pass was unavailable, so this is the static analysis result only."
         skipped = [{"lens": "triage", "reason": str(e)[:200]}]
 
-    merged, trimmed = trim_noise(merge_findings(raw))
+    merged, trimmed = trim_noise(merge_findings(raw + powers_as_findings(prepared.inventory)))
     merged = assign_ids(merged)[:5]
     score = risk_score(merged)
     report = Report.build_v2(

@@ -135,7 +135,12 @@ def refute_findings(
     outcomes: list[dict | None] = [None] * len(findings)
     to_check: list[int] = []
     for i, f in enumerate(findings):
-        if f.get("severity") == "info":
+        if f.get("refutation"):
+            # Already decided by whoever produced it. A privileged power read
+            # straight out of the code is a fact, not a claim to argue about,
+            # and sending it to a skeptic would only make the report unstable.
+            outcomes[i] = dict(f)
+        elif f.get("severity") == "info":
             outcomes[i] = {**f, "refutation": {"verdict": "not_checked",
                                                "reason": "info level, not worth a challenge"}}
         else:
