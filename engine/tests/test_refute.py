@@ -127,3 +127,54 @@ def test_a_challenge_that_hangs_past_the_budget_drops_that_finding_only():
         assert "slow" not in titles
     finally:
         release.set()
+
+
+SLITHER_FINDING = {**FINDING, "title": "detector hit", "provenance": ["slither:arbitrary-send"],
+                   "category": "static_analysis"}
+
+
+def test_a_detector_hit_survives_an_outage_marked_as_unchallenged():
+    class DeadLlm:
+        def generate(self, _):
+            raise RuntimeError("model down")
+
+    kept = refute_findings([SLITHER_FINDING], files={"A.sol": "x\n" * 20}, llm=DeadLlm())
+    assert len(kept) == 1
+    assert kept[0]["refutation"]["verdict"] == "not_checked"
+    assert "unavailable" in kept[0]["refutation"]["reason"]
+    assert kept[0]["severity"] == "high"
+
+
+def test_a_model_claim_does_not_survive_an_outage():
+    class DeadLlm:
+        def generate(self, _):
+            raise RuntimeError("model down")
+
+    assert refute_findings([FINDING], files={"A.sol": "x\n" * 20}, llm=DeadLlm()) == []
+
+
+def test_a_detector_hit_that_is_genuinely_refuted_is_still_dropped():
+    class Llm:
+        def generate(self, _):
+            return json.dumps({"verdict": "refuted", "reason": "the check is a false positive here"})
+
+    assert refute_findings([SLITHER_FINDING], files={"A.sol": "x\n" * 20}, llm=Llm()) == []
+
+
+def test_a_detector_hit_survives_a_timeout_while_a_model_claim_does_not():
+    import threading
+
+    release = threading.Event()
+
+    class Llm:
+        def generate(self, _):
+            release.wait(5)
+            return json.dumps({"verdict": "stands", "reason": "late"})
+
+    try:
+        kept = refute_findings([SLITHER_FINDING, FINDING], files={"A.sol": "x\n" * 20},
+                               llm=Llm(), budget_seconds=0.2)
+        assert [f["title"] for f in kept] == ["detector hit"]
+        assert kept[0]["refutation"]["verdict"] == "not_checked"
+    finally:
+        release.set()

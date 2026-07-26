@@ -58,6 +58,23 @@ def build_refute_prompt(finding: dict, *, excerpt: dict | None) -> str:
     )
 
 
+def _is_static_evidence(finding: dict) -> bool:
+    """True when a static analyser reported this, not only a reasoning pass.
+
+    The distinction decides what happens when the skeptic cannot answer. A model
+    claim with nobody to defend it is a guess and does not ship. A detector hit
+    is a deterministic fact about the code, so it ships marked as unchallenged
+    rather than being deleted by an unrelated outage.
+    """
+    return any(str(p).startswith("slither:") for p in finding.get("provenance", []))
+
+
+def _unchallenged(finding: dict, reason: str) -> dict | None:
+    if not _is_static_evidence(finding):
+        return None
+    return {**finding, "refutation": {"verdict": "not_checked", "reason": reason}}
+
+
 def _challenge(finding: dict, *, files: dict[str, str], llm) -> dict | None:
     """Put one finding in front of a skeptic. Returns None when it does not survive."""
     prompt = build_refute_prompt(finding, excerpt=excerpt_at(files, finding.get("location", "")))
@@ -66,10 +83,11 @@ def _challenge(finding: dict, *, files: dict[str, str], llm) -> dict | None:
         verdict_raw = str(data.get("verdict", "refuted")).strip().lower()
         reason = str(data.get("reason", ""))[:400]
     except Exception:
-        # A challenge we could not even read is not a defence, so the finding
-        # does not ship. Failing the other way would let a model outage turn
-        # into a report full of unchallenged guesses.
-        return None
+        # A challenge we could not even read is not a defence, so a model claim
+        # does not ship. Failing the other way would let an outage fill a report
+        # with unchallenged guesses. Static analysis evidence is different, it
+        # stands on its own and survives marked as unchallenged.
+        return _unchallenged(finding, "the reviewer was unavailable, this is a static analysis result")
     mapped = _VERDICT_MAP.get(verdict_raw)
     if mapped is None:
         return None
@@ -114,9 +132,13 @@ def refute_findings(
                 for fut in as_completed(futures, timeout=budget_seconds):
                     outcomes[futures[fut]] = fut.result()
             except TimeoutError:
-                # Whatever has not answered by now stays None, which means it
-                # does not ship. Undefended is treated exactly like refuted.
-                pass
+                # Whatever has not answered by now is undefended, which is
+                # treated exactly like refuted for a model claim. A detector hit
+                # still ships, marked as unchallenged.
+                for i in to_check:
+                    if outcomes[i] is None:
+                        outcomes[i] = _unchallenged(
+                            findings[i], "the challenge did not finish in time")
         finally:
             # Never wait here. A stuck model call cannot be killed from outside,
             # so waiting would hand the hang straight back to the paying caller.
