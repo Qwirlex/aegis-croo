@@ -6,6 +6,8 @@ import re
 import subprocess
 import tempfile
 
+from .chains import CHAINS
+
 # Resolve the venv Scripts directory relative to this file so subprocess
 # calls work regardless of the system PATH (needed on Windows where solc/slither
 # are installed into the project venv, not the system PATH). On Linux the venv
@@ -122,8 +124,14 @@ def _ensure_solc(version: str) -> None:
     subprocess.run([_SOLC_SELECT, "install", version], capture_output=True, text=True)
 
 
-# Map our report network names to crytic-compile's Etherscan-platform prefixes.
-_NETWORK_PREFIX = {"base": "base", "base-sepolia": "sepolia.base", "mainnet": "mainnet"}
+# Legacy names kept so existing callers that pass network= keep working, plus the
+# crytic prefix for every chain we audit. Anything unknown falls back to base.
+_NETWORK_PREFIX = {
+    "base": "base",
+    "base-sepolia": "sepolia.base",
+    "mainnet": "mainnet",
+    **{name: c.crytic_prefix for name, c in CHAINS.items()},
+}
 
 
 def _parse_slither_json(data: dict) -> list[dict]:
@@ -179,6 +187,7 @@ def run_slither(
     *,
     address: str | None = None,
     network: str = "base",
+    chain: str | None = None,
 ) -> list[dict]:
     """Compile + run slither, return normalized findings.
 
@@ -209,7 +218,7 @@ def run_slither(
             # reads as the *language*; an absolute path becomes "Unknown
             # language". Leaving it unset defaults to the bare "solc" shim on
             # PATH, and SOLC_VERSION selects the concrete version.
-            prefix = _NETWORK_PREFIX.get(network, "base")
+            prefix = _NETWORK_PREFIX.get(chain or network, "base")
             cmd = [
                 _SLITHER,
                 f"{prefix}:{address}",

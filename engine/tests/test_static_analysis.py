@@ -87,3 +87,28 @@ def test_flatten_source_concatenates_multifile():
 def test_flatten_source_passthrough_for_plain():
     src = "pragma solidity ^0.8.0;\ncontract C{}"
     assert flatten_source(src) == src
+
+
+from aegis_engine import static_analysis as sa
+
+
+def test_address_path_uses_the_crytic_prefix_for_the_chain(monkeypatch):
+    seen = {}
+
+    def fake_cmd(cmd, cwd, version, out_json):
+        seen["target"] = cmd[1]
+        return []
+
+    monkeypatch.setattr(sa, "_run_slither_cmd", fake_cmd)
+    monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
+    sa.run_slither("contract A {}", "0.8.20", address="0xabc", chain="arbitrum")
+    assert seen["target"] == "arbi:0xabc"
+
+
+def test_unknown_chain_falls_back_to_base(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(sa, "_run_slither_cmd",
+                        lambda cmd, cwd, version, out_json: seen.setdefault("t", cmd[1]) or [])
+    monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
+    sa.run_slither("contract A {}", "0.8.20", address="0xabc", chain="does-not-exist")
+    assert seen["t"] == "base:0xabc"
