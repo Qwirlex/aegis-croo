@@ -63,7 +63,6 @@ c = r["coverage"]
 print("lenses:", ",".join(c["lenses_run"]) or "none", "| skipped:", len(c["lenses_skipped"]), "| detectors:", c["detectors_run"])
 print("signer:", r["signer"] or "unsigned")
 print("report page: https://aegiscan.xyz/audit/" + d["id"])
-PY_END
 PY
 
 rm -f "$OUT"
