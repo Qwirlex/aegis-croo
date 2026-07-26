@@ -33,6 +33,17 @@ SLITHER:
 """
 
 
+# Per request timeout for the underlying call, in milliseconds, so a single
+# hung request dies on its own instead of leaking a thread forever. Verified
+# against the installed google-genai package: types.HttpOptions.timeout is
+# documented as "Timeout for the request in milliseconds", it reaches the
+# request through GenerateContentConfig.http_options, and _api_client.py
+# converts it to seconds and passes it straight through as the underlying
+# httpx request timeout. This is a second, independent line of defense; the
+# as_completed budget in lenses.py is the other one and does not depend on it.
+_DEFAULT_TIMEOUT_MS = int(os.environ.get("AEGIS_LLM_TIMEOUT_MS", "60000"))
+
+
 class GeminiClient:
     """Gemini via Vertex AI, authenticated with Application Default Credentials (ADC).
 
@@ -49,7 +60,14 @@ class GeminiClient:
         self._model = os.environ.get("AEGIS_LLM_MODEL", "gemini-3.5-flash")
 
     def generate(self, prompt: str) -> str:
-        resp = self._client.models.generate_content(model=self._model, contents=prompt)
+        from google.genai import types
+
+        config = types.GenerateContentConfig(
+            http_options=types.HttpOptions(timeout=_DEFAULT_TIMEOUT_MS)
+        )
+        resp = self._client.models.generate_content(
+            model=self._model, contents=prompt, config=config
+        )
         return resp.text
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 # Reusing the private JSON unwrapper rather than duplicating its handling of a
@@ -99,6 +99,13 @@ class LensRun:
     findings: list[dict] = field(default_factory=list)
     lenses_run: list[str] = field(default_factory=list)
     lenses_skipped: list[dict] = field(default_factory=list)
+    # Per lens count of findings _parse discarded for having no real location.
+    # Without this, a lens that came back with ten ungrounded findings reads
+    # in a report exactly like a lens that found nothing, which is not the
+    # same thing and should not look the same in the coverage section. Only
+    # lenses that actually dropped something get an entry here, same as
+    # lenses_skipped only holding lenses that actually failed.
+    dropped: list[dict] = field(default_factory=list)
 
 
 def lenses_for(inventory: dict) -> list[Lens]:
@@ -129,15 +136,24 @@ def build_lens_prompt(lens: Lens, *, source: str, inventory: dict, slither: list
 _ALLOWED_SEVERITIES = {"critical", "high", "medium", "low", "info"}
 
 
-def _parse(lens: Lens, raw: str) -> list[dict]:
+def _parse(lens: Lens, raw: str) -> tuple[list[dict], int]:
+    """Return the grounded findings and a count of what got discarded.
+
+    The count matters as much as the survivors: a lens that came back with
+    ten ungrounded findings is not the same as a lens that found nothing, and
+    the caller needs to be able to tell the two apart.
+    """
     data = _strip_json(raw)
     out: list[dict] = []
+    dropped = 0
     for f in data.get("findings", []):
         loc = (f.get("location") or "").strip()
         if not loc or ":" not in loc:
+            dropped += 1
             continue  # grounding rule, a finding without a line is not a finding
         line_part = loc.rpartition(":")[2].strip()
         if not line_part.isdigit():
+            dropped += 1
             continue  # grounding rule, a colon with no real line number is not a finding
         # A model very often answers "Critical" or "HIGH" rather than the
         # lowercase form the checklist shows, so the case is normalized before
@@ -158,28 +174,83 @@ def _parse(lens: Lens, raw: str) -> list[dict]:
             "recommendation": f.get("recommendation", ""),
             "provenance": [f"lens:{lens.name}"],
         })
-    return out
+    return out, dropped
 
 
-def run_lenses(*, lenses, source: str, inventory: dict, slither: list[dict], llm=None) -> LensRun:
-    """Run every lens concurrently. A lens that fails is recorded, never fatal."""
+# Overall wall clock budget for one run_lenses call across the whole set of
+# lenses, not per lens. Six concurrent model calls that each normally answer
+# in well under a minute comfortably fit inside this, with room to spare for
+# one slow one. A caller can override it, and a test can pass a tiny value so
+# a stuck lens surfaces immediately instead of hanging the whole suite.
+DEFAULT_LENS_BUDGET_SECONDS = 180.0
+
+
+def run_lenses(
+    *,
+    lenses: list[Lens],
+    source: str,
+    inventory: dict,
+    slither: list[dict],
+    llm=None,
+    budget_seconds: float = DEFAULT_LENS_BUDGET_SECONDS,
+) -> LensRun:
+    """Run every lens concurrently, bounded by one overall time budget.
+
+    Draining goes through as_completed with that budget as its timeout, so a
+    slow or hung lens can never delay collecting the ones that already
+    finished, and can never block the whole run past the budget either. A
+    lens that raises, and a lens still running when the budget runs out, are
+    both recorded in lenses_skipped rather than left to stall a paid job
+    forever. The pool is shut down without waiting for any lens still running
+    past the budget, an abandoned thread is not worth blocking on twice. The
+    output order still follows the original lens order, not completion
+    order, so callers see a stable, predictable report regardless of which
+    lens happened to answer first.
+    """
+    lenses = list(lenses)
     llm = llm or GeminiClient()
     result = LensRun()
 
     def one(lens: Lens):
         prompt = build_lens_prompt(lens, source=source, inventory=inventory, slither=slither)
-        return lens, _parse(lens, llm.generate(prompt))
+        return _parse(lens, llm.generate(prompt))
 
-    with ThreadPoolExecutor(max_workers=len(list(lenses)) or 1) as pool:
+    pool = ThreadPoolExecutor(max_workers=len(lenses) or 1)
+    outcomes: list[tuple | None] = [None] * len(lenses)
+    try:
         futures = [pool.submit(one, lens) for lens in lenses]
-        pairs = []
-        for lens, fut in zip(lenses, futures):
-            try:
-                pairs.append(fut.result())
-            except Exception as e:
-                result.lenses_skipped.append({"lens": lens.name, "reason": str(e)[:200]})
+        future_index = {fut: i for i, fut in enumerate(futures)}
+        try:
+            for fut in as_completed(futures, timeout=budget_seconds):
+                i = future_index[fut]
+                try:
+                    findings, dropped = fut.result()
+                    outcomes[i] = ("ok", findings, dropped)
+                except Exception as e:
+                    outcomes[i] = ("error", str(e)[:200])
+        except TimeoutError:
+            pass  # whatever is still None below ran out of budget, not an error
+    finally:
+        # A lens still running past the budget must not block shutdown, that
+        # would defeat the whole point of the budget. Abandon it instead of
+        # waiting, the process exit hook joins any thread that is still
+        # somehow alive once the underlying call itself finally gives up.
+        pool.shutdown(wait=False)
 
-    for lens, findings in pairs:
+    for lens, outcome in zip(lenses, outcomes):
+        if outcome is None:
+            result.lenses_skipped.append({
+                "lens": lens.name,
+                "reason": f"timed out after {budget_seconds} seconds",
+            })
+            continue
+        kind = outcome[0]
+        if kind == "error":
+            result.lenses_skipped.append({"lens": lens.name, "reason": outcome[1]})
+            continue
+        _, findings, dropped = outcome
         result.lenses_run.append(lens.name)
         result.findings.extend(findings)
+        if dropped:
+            result.dropped.append({"lens": lens.name, "count": dropped})
     return result

@@ -1,4 +1,6 @@
 import json
+import threading
+
 from aegis_engine.lenses import LENSES, lenses_for, build_lens_prompt, run_lenses
 
 
@@ -145,3 +147,73 @@ def test_run_lenses_with_an_empty_lens_list_does_not_crash_on_max_workers():
     assert out.findings == []
     assert out.lenses_run == []
     assert out.lenses_skipped == []
+
+
+def test_run_lenses_accepts_a_generator_without_silently_returning_an_empty_result():
+    def gen():
+        yield LENSES[0]
+
+    class FakeLlm:
+        def generate(self, _):
+            return json.dumps({"findings": [
+                {"severity": "high", "title": "t", "location": "A.sol:1", "description": "d"},
+            ]})
+
+    out = run_lenses(lenses=gen(), source="s", inventory={}, slither=[], llm=FakeLlm())
+    assert out.lenses_run == ["access_control"]
+    assert len(out.findings) == 1
+
+
+def test_a_lens_that_hangs_past_the_budget_is_skipped_and_does_not_block_the_fast_one():
+    release = threading.Event()
+
+    class SlowThenFastLlm:
+        def generate(self, prompt):
+            if "LENS: reentrancy_state" in prompt:
+                # Never returns on its own within the test, only once the
+                # test releases it, well after the tiny budget below.
+                release.wait(timeout=5)
+                return json.dumps({"findings": []})
+            return json.dumps({"findings": [{
+                "severity": "high", "title": "fast finding", "location": "A.sol:1",
+                "description": "d",
+            }]})
+
+    try:
+        out = run_lenses(
+            lenses=LENSES[:2], source="s", inventory={}, slither=[],
+            llm=SlowThenFastLlm(), budget_seconds=0.2,
+        )
+    finally:
+        release.set()  # let the blocked worker thread finish, nothing lingers
+
+    assert out.lenses_run == ["access_control"]
+    assert [f["title"] for f in out.findings] == ["fast finding"]
+    assert len(out.lenses_skipped) == 1
+    assert out.lenses_skipped[0]["lens"] == "reentrancy_state"
+    assert "time" in out.lenses_skipped[0]["reason"].lower()
+
+
+def test_a_lens_returning_only_ungrounded_findings_is_run_with_a_nonzero_dropped_count():
+    class AllUngroundedLlm:
+        def generate(self, _):
+            return json.dumps({"findings": [
+                {"severity": "high", "title": "vague one", "location": "", "description": "d"},
+                {"severity": "high", "title": "vague two", "location": "A.sol:", "description": "d"},
+            ]})
+
+    out = run_lenses(lenses=LENSES[:1], source="s", inventory={}, slither=[], llm=AllUngroundedLlm())
+    assert out.lenses_run == ["access_control"]
+    assert out.findings == []
+    assert out.dropped == [{"lens": "access_control", "count": 2}]
+
+
+def test_a_lens_with_no_dropped_findings_does_not_appear_in_dropped():
+    class CleanLlm:
+        def generate(self, _):
+            return json.dumps({"findings": [
+                {"severity": "high", "title": "real", "location": "A.sol:1", "description": "d"},
+            ]})
+
+    out = run_lenses(lenses=LENSES[:1], source="s", inventory={}, slither=[], llm=CleanLlm())
+    assert out.dropped == []
