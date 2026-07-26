@@ -40,9 +40,14 @@ for i in $(seq 1 40); do
   [ "$STATE" = "running" ] || break
 done
 
-curl -s --max-time 30 "$ENGINE/audit/jobs/$JOB" | "$PY" - <<'PY'
+# The finished job goes to a file rather than a pipe, because the heredoc below
+# is itself stdin for python and would swallow a piped body.
+OUT=$(mktemp)
+curl -s --max-time 30 "$ENGINE/audit/jobs/$JOB" > "$OUT"
+
+"$PY" - "$OUT" <<'PY'
 import json, sys
-d = json.load(sys.stdin)
+d = json.load(open(sys.argv[1]))
 r = d.get("report")
 if not r:
     print("state", d["state"], "reason", d.get("reason"))
@@ -58,4 +63,7 @@ c = r["coverage"]
 print("lenses:", ",".join(c["lenses_run"]) or "none", "| skipped:", len(c["lenses_skipped"]), "| detectors:", c["detectors_run"])
 print("signer:", r["signer"] or "unsigned")
 print("report page: https://aegiscan.xyz/audit/" + d["id"])
+PY_END
 PY
+
+rm -f "$OUT"
