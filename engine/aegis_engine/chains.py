@@ -28,8 +28,8 @@ def chain_names() -> list[str]:
     return list(CHAINS)
 
 
-def chain_or_raise(name: str) -> Chain:
+def chain_or_raise(name: str | None) -> Chain:
     c = CHAINS.get((name or "").strip().lower())
     if c is None:
-        raise ValueError(f"chain not supported, supported {', '.join(CHAINS)}")
+        raise ValueError(f"chain not supported, use one of {', '.join(CHAINS)}")
     return c
