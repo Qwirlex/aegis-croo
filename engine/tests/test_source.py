@@ -1,6 +1,9 @@
+import json
+
 import httpx
 import pytest
-from aegis_engine.source import resolve_source
+
+from aegis_engine.source import ExplorerUnavailable, _explorer_fetch, resolve_source
 
 
 def test_passthrough_when_source_given():
@@ -9,7 +12,7 @@ def test_passthrough_when_source_given():
     assert res.address is None
 
 
-def test_fetch_from_basescan_defaults_to_base_chain_id(monkeypatch):
+def test_fetch_from_basescan_defaults_to_base_chain_id():
     def fake_fetch(addr, chain_id):
         assert chain_id == 8453
         return {"SourceCode": "contract V {}", "CompilerVersion": "v0.8.25+commit"}
@@ -66,3 +69,113 @@ def test_missing_verified_source_says_so_plainly():
     with pytest.raises(ValueError) as e:
         resolve_source(source=None, address="0xabc", chain="base", fetch=fake_fetch)
     assert "no verified source" in str(e.value)
+
+
+def test_a_non_string_compiler_version_falls_back_to_auto():
+    def fake_fetch(*_a, **_k):
+        return {"SourceCode": "contract Q {}", "CompilerVersion": 12345, "ContractName": "Q"}
+
+    rs = resolve_source(source=None, address="0xabc", chain="base", fetch=fake_fetch)
+    assert rs.compiler == "auto"
+
+
+def _mock_get(handler):
+    """Route httpx.get through a MockTransport so _explorer_fetch sees a real
+    httpx.Response end to end, not a hand rolled stand in."""
+    def fake_get(url, params=None, timeout=None):
+        transport = httpx.MockTransport(handler)
+        with httpx.Client(transport=transport) as client:
+            return client.get(url, params=params, timeout=timeout)
+    return fake_get
+
+
+def test_explorer_fetch_without_an_api_key_says_so_plainly(monkeypatch):
+    monkeypatch.delenv("BASESCAN_API_KEY", raising=False)
+
+    with pytest.raises(ExplorerUnavailable) as e:
+        _explorer_fetch("0xabc", 8453)
+    assert "explorer api key is not configured" in str(e.value)
+
+
+def test_explorer_fetch_reports_a_status_zero_answer_as_a_value_error(monkeypatch):
+    monkeypatch.setenv("BASESCAN_API_KEY", "test-key")
+
+    def handler(request):
+        return httpx.Response(
+            200, json={"status": "0", "message": "NOTOK", "result": "Invalid API Key"}
+        )
+
+    monkeypatch.setattr(httpx, "get", _mock_get(handler))
+
+    with pytest.raises(ValueError) as e:
+        _explorer_fetch("0xabc", 8453)
+    assert "explorer lookup failed" in str(e.value)
+
+
+def test_explorer_fetch_reports_no_source_when_explorer_confirms_unverified(monkeypatch):
+    monkeypatch.setenv("BASESCAN_API_KEY", "test-key")
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"status": "1", "message": "OK",
+                  "result": [{"SourceCode": "", "ContractName": ""}]},
+        )
+
+    monkeypatch.setattr(httpx, "get", _mock_get(handler))
+
+    with pytest.raises(ValueError) as e:
+        _explorer_fetch("0xabc", 8453)
+    assert "no verified source" in str(e.value)
+
+
+def test_explorer_fetch_wraps_a_non_json_response_as_explorer_unavailable(monkeypatch):
+    monkeypatch.setenv("BASESCAN_API_KEY", "test-key")
+
+    def handler(request):
+        return httpx.Response(200, content=b"not json at all")
+
+    monkeypatch.setattr(httpx, "get", _mock_get(handler))
+
+    with pytest.raises(ExplorerUnavailable) as e:
+        _explorer_fetch("0xabc", 8453)
+    assert "could not reach the block explorer for chain 8453" in str(e.value)
+    assert isinstance(e.value.__cause__, json.JSONDecodeError)
+
+
+def test_explorer_fetch_wraps_an_http_error_status_as_explorer_unavailable(monkeypatch):
+    monkeypatch.setenv("BASESCAN_API_KEY", "test-key")
+
+    def handler(request):
+        return httpx.Response(500, text="internal server error")
+
+    monkeypatch.setattr(httpx, "get", _mock_get(handler))
+
+    with pytest.raises(ExplorerUnavailable) as e:
+        _explorer_fetch("0xabc", 8453)
+    assert "could not reach the block explorer for chain 8453" in str(e.value)
+    assert isinstance(e.value.__cause__, httpx.HTTPStatusError)
+
+
+def test_explorer_fetch_happy_path_returns_the_entry(monkeypatch):
+    monkeypatch.setenv("BASESCAN_API_KEY", "test-key")
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "status": "1",
+                "message": "OK",
+                "result": [{
+                    "SourceCode": "contract E {}",
+                    "CompilerVersion": "v0.8.19+commit.abc123",
+                    "ContractName": "E",
+                }],
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", _mock_get(handler))
+
+    entry = _explorer_fetch("0xdef", 8453)
+    assert entry["SourceCode"] == "contract E {}"
+    assert entry["ContractName"] == "E"

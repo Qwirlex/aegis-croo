@@ -213,6 +213,8 @@ def run_slither(
             cmd = [
                 _SLITHER,
                 f"{prefix}:{address}",
+                # BASESCAN_API_KEY is a historical name, see aegis_engine/source.py
+                # for why one key serves all six chains.
                 "--etherscan-apikey", os.environ.get("BASESCAN_API_KEY", ""),
                 "--json", str(out_json),
             ]
