@@ -127,3 +127,81 @@ def test_proxy_marker_word_inside_a_comment_does_not_flag_upgradeable():
     }
     """
     assert build_inventory({"P.sol": src})["is_upgradeable"] is False
+
+
+def test_custom_modifier_name_still_gates_the_function():
+    # requiresRole is not on the old allowlist of gate-hint substrings
+    # (only/auth/restricted/admin/governance), so this pins the inverted rule:
+    # anything not on the small benign denylist counts as a gate.
+    src = """
+    contract C {
+        function doPrivilegedAction() external requiresRole { }
+    }
+    """
+    powers = build_inventory({"C.sol": src})["privileged_powers"]
+    assert [p["function"] for p in powers] == ["doPrivilegedAction"]
+
+
+def test_benign_modifier_alone_does_not_gate_the_function():
+    src = """
+    contract C {
+        function doThing() external nonReentrant { }
+    }
+    """
+    powers = build_inventory({"C.sol": src})["privileged_powers"]
+    assert powers == []
+
+
+def test_unrecognized_gated_function_defaults_to_moving_funds_with_low_confidence():
+    src = """
+    contract C {
+        function doPrivilegedAction() external requiresRole { }
+    }
+    """
+    powers = build_inventory({"C.sol": src})["privileged_powers"]
+    assert len(powers) == 1
+    power = powers[0]
+    assert power["can_move_funds"] is True
+    assert power["confidence"] == "low"
+    assert power["capability"] == "does something only a privileged caller can do, review it"
+
+
+def test_fee_recipient_redirect_is_distinguished_from_a_plain_fee_change():
+    src = """
+    contract C {
+        function setFeeRecipient(address to) external onlyOwner { }
+        function setFee(uint256 f) external onlyOwner { }
+    }
+    """
+    powers = build_inventory({"C.sol": src})["privileged_powers"]
+    by_fn = {p["function"]: p for p in powers}
+    assert by_fn["setFeeRecipient"]["capability"] == "repoint a critical address"
+    assert by_fn["setFeeRecipient"]["can_move_funds"] is True
+    assert by_fn["setFee"]["capability"] == "change fees"
+    assert by_fn["setFee"]["can_move_funds"] is False
+
+
+def test_claim_function_is_not_marked_as_moving_funds():
+    src = """
+    contract C {
+        function claimTokens() external onlyOwner { }
+    }
+    """
+    powers = build_inventory({"C.sol": src})["privileged_powers"]
+    assert powers[0]["can_move_funds"] is False
+
+
+def test_getter_name_does_not_flip_upgradeable_but_a_real_function_does():
+    getter_src = """
+    contract C {
+        function getImplementationDetails() external view returns (address) { return address(0); }
+    }
+    """
+    assert build_inventory({"C.sol": getter_src})["is_upgradeable"] is False
+
+    real_src = """
+    contract C {
+        function upgradeTo(address impl) external onlyOwner { }
+    }
+    """
+    assert build_inventory({"C.sol": real_src})["is_upgradeable"] is True
