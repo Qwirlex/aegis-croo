@@ -12,6 +12,7 @@ contract Tok {
     function setFee(uint256 f) external onlyOwner { }
     function pause() external onlyOwner { }
     function _internalThing() internal { }
+    function _internalGated() internal onlyOwner { }
 }
 """
 
@@ -52,6 +53,10 @@ def test_privileged_powers_are_classified_and_fund_moving_ones_flagged():
     assert by_fn["pause"]["capability"] == "pause activity"
     assert by_fn["setFee"]["capability"] == "change fees"
     assert "_internalThing" not in by_fn
+    # Genuinely gated but internal: the visibility filter, not the gate check,
+    # must be what excludes it. Without _internalGated, deleting the visibility
+    # filter entirely would still pass this test.
+    assert "_internalGated" not in by_fn
 
 
 def test_no_gated_functions_means_no_powers():
