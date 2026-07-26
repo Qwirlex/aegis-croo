@@ -1,6 +1,7 @@
 import json
 import pathlib
 import pytest
+from aegis_engine import static_analysis as sa
 from aegis_engine.static_analysis import (
     run_slither,
     resolve_solc_version,
@@ -89,8 +90,9 @@ def test_flatten_source_passthrough_for_plain():
     assert flatten_source(src) == src
 
 
-from aegis_engine import static_analysis as sa
-
+# ---------------------------------------------------------------------------
+# Chain / network prefix resolution on the address path
+# ---------------------------------------------------------------------------
 
 def test_address_path_uses_the_crytic_prefix_for_the_chain(monkeypatch):
     seen = {}
@@ -112,3 +114,34 @@ def test_unknown_chain_falls_back_to_base(monkeypatch):
     monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
     sa.run_slither("contract A {}", "0.8.20", address="0xabc", chain="does-not-exist")
     assert seen["t"] == "base:0xabc"
+
+
+def test_network_only_resolves_to_its_prefix(monkeypatch):
+    # the legacy network= argument still works when chain= is not given
+    seen = {}
+    monkeypatch.setattr(sa, "_run_slither_cmd",
+                        lambda cmd, cwd, version, out_json: seen.setdefault("t", cmd[1]) or [])
+    monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
+    sa.run_slither("contract A {}", "0.8.20", address="0xabc", network="mainnet")
+    assert seen["t"] == "mainnet:0xabc"
+
+
+def test_chain_wins_over_conflicting_network(monkeypatch):
+    # when both are given, chain takes precedence over the legacy network arg
+    seen = {}
+    monkeypatch.setattr(sa, "_run_slither_cmd",
+                        lambda cmd, cwd, version, out_json: seen.setdefault("t", cmd[1]) or [])
+    monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
+    sa.run_slither("contract A {}", "0.8.20", address="0xabc", network="mainnet", chain="polygon")
+    assert seen["t"] == "poly:0xabc"
+
+
+def test_chain_lookup_is_normalized(monkeypatch):
+    # surrounding whitespace and casing must not silently fall back to base,
+    # since that would mean auditing the wrong chain's contract with no error
+    seen = {}
+    monkeypatch.setattr(sa, "_run_slither_cmd",
+                        lambda cmd, cwd, version, out_json: seen.setdefault("t", cmd[1]) or [])
+    monkeypatch.setattr(sa, "_ensure_solc", lambda v: None)
+    sa.run_slither("contract A {}", "0.8.20", address="0xabc", chain=" Polygon ")
+    assert seen["t"] == "poly:0xabc"

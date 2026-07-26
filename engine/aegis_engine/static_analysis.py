@@ -126,6 +126,9 @@ def _ensure_solc(version: str) -> None:
 
 # Legacy names kept so existing callers that pass network= keep working, plus the
 # crytic prefix for every chain we audit. Anything unknown falls back to base.
+# Also accepts the full chain names from chains.CHAINS (e.g. "arbitrum", "polygon");
+# the "base" entry below is kept for readability even though the CHAINS merge
+# would supply the same value anyway.
 _NETWORK_PREFIX = {
     "base": "base",
     "base-sepolia": "sepolia.base",
@@ -193,11 +196,21 @@ def run_slither(
 
     Two paths:
     - ``address`` given: hand the verified contract to crytic-compile's Etherscan
-      platform (``slither base:0x...``). It fetches the source, lays multi-file
-      and standard-json projects out on disk with the right remappings, and
-      compiles them. This is what makes multi-file contracts (DAI, USDC, anything
-      OpenZeppelin based) analyze instead of failing on a raw ``{{`` blob.
+      platform (``slither <prefix>:0x...``, where prefix depends on the chain,
+      for example ``base:0x...`` or ``arbi:0x...``). It fetches the source, lays
+      multi-file and standard-json projects out on disk with the right
+      remappings, and compiles them. This is what makes multi-file contracts
+      (DAI, USDC, anything OpenZeppelin based) analyze instead of failing on a
+      raw ``{{`` blob.
     - raw ``source`` only: write a single Target.sol and compile it, as before.
+
+    ``chain`` and ``network`` both select the crytic-compile prefix for the
+    address path; ``chain`` wins when both are given, ``network`` is the legacy
+    argument kept for the existing CROO caller. Neither is validated here: an
+    unresolvable value quietly falls back to the base prefix rather than
+    raising, because the buyer facing chain validation already happened one
+    layer up in ``source.resolve_source`` via ``chains.chain_or_raise``. See the
+    comment above ``_NETWORK_PREFIX`` for the exact lookup rule.
 
     The contract's own solc version is resolved from solc_version or the source
     pragma and installed via solc-select; SOLC_VERSION selects it for the run.
@@ -218,7 +231,16 @@ def run_slither(
             # reads as the *language*; an absolute path becomes "Unknown
             # language". Leaving it unset defaults to the bare "solc" shim on
             # PATH, and SOLC_VERSION selects the concrete version.
-            prefix = _NETWORK_PREFIX.get(chain or network, "base")
+            # chain wins over network; network is the legacy argument kept for
+            # the existing CROO caller. Normalize before lookup, since the gate
+            # one layer up (chains.chain_or_raise, called from
+            # source.resolve_source) does the same strip().lower(), and this
+            # table must not silently disagree with it. An unresolvable key
+            # falls back to "base" on purpose: the buyer facing validation
+            # already happened in resolve_source, so failing here would turn an
+            # internal naming mismatch into a buyer facing error.
+            key = (chain or network or "").strip().lower()
+            prefix = _NETWORK_PREFIX.get(key, "base")
             cmd = [
                 _SLITHER,
                 f"{prefix}:{address}",
