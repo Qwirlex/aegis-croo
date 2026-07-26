@@ -12,9 +12,14 @@ _PROMPT = """You are a skeptical reviewer whose only job is to REFUTE a claimed 
 Assume the claim is wrong until the code proves otherwise. If you are uncertain, answer refuted.
 A claim survives only when the code in front of you clearly shows the problem is real and reachable.
 Return STRICT JSON: {{"verdict": one of refuted|weakened|stands, "reason": str}}
-refuted means the claim is wrong, already prevented, or not reachable.
-weakened means something real is there but the severity is overstated or it needs a privileged caller.
+refuted means the claim is wrong, already prevented by the code, or not reachable at all.
+weakened means something real is there but the severity is overstated.
 stands means the claim holds as written.
+A restriction to the owner, an admin or any privileged role is NOT a defence and is NOT a reason to
+weaken a claim. If a privileged caller can take, freeze or dilute value that belongs to someone else,
+the claim stands at full severity, because who holds that key is exactly what the reader is paying to
+find out. Only refute on the strength of code that actually prevents the problem, such as a hard cap,
+a timelock, a check that reverts, or an unreachable path.
 Keep the reason to one or two short sentences in plain English. No em dashes, no parentheses.
 CLAIM:
 title: {title}
@@ -33,6 +38,18 @@ _VERDICT_MAP: dict[str, str | None] = {
     "refuted": None,
     "weakened": "demoted",
     "stands": "kept",
+}
+
+# A weakened claim drops one band, not straight to the floor. Sending it to info
+# used to bury real owner power at the bottom of the report next to naming notes,
+# which is the opposite of what a buyer is paying to see. One step down says the
+# reviewer had a reservation without pretending the finding barely matters.
+_ONE_BAND_DOWN = {
+    "critical": "high",
+    "high": "medium",
+    "medium": "low",
+    "low": "info",
+    "info": "info",
 }
 
 # Overall wall clock budget for one refutation pass across every finding, not
@@ -92,7 +109,8 @@ def _challenge(finding: dict, *, files: dict[str, str], llm) -> dict | None:
     if mapped is None:
         return None
     if mapped == "demoted":
-        return {**finding, "severity": "info",
+        lowered = _ONE_BAND_DOWN.get(finding.get("severity", "info"), "info")
+        return {**finding, "severity": lowered,
                 "refutation": {"verdict": "demoted", "reason": reason}}
     return {**finding, "refutation": {"verdict": "kept", "reason": reason}}
 

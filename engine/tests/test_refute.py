@@ -46,14 +46,35 @@ def test_a_kept_finding_carries_the_verdict():
     assert kept[0]["severity"] == "high"
 
 
-def test_a_partly_refuted_finding_is_demoted_to_info_not_deleted():
+def test_a_partly_refuted_finding_drops_one_band_and_is_not_deleted():
     class Llm:
         def generate(self, _):
             return json.dumps({"verdict": "weakened", "reason": "only reachable by the owner"})
 
     kept = refute_findings([FINDING], files={"A.sol": "x\n" * 20}, llm=Llm())
-    assert kept[0]["severity"] == "info"
+    # One band down, not straight to the floor. Sending a weakened high to info
+    # buried real owner power next to naming notes, which is its own kind of lie.
+    assert kept[0]["severity"] == "medium"
     assert kept[0]["refutation"]["verdict"] == "demoted"
+
+
+def test_a_weakened_critical_is_still_serious():
+    class Llm:
+        def generate(self, _):
+            return json.dumps({"verdict": "weakened", "reason": "needs an unusual setup"})
+
+    kept = refute_findings([{**FINDING, "severity": "critical"}], files={"A.sol": "x\n" * 20},
+                           llm=Llm())
+    assert kept[0]["severity"] == "high"
+
+
+def test_a_weakened_low_lands_in_info():
+    class Llm:
+        def generate(self, _):
+            return json.dumps({"verdict": "weakened", "reason": "cosmetic"})
+
+    kept = refute_findings([{**FINDING, "severity": "low"}], files={"A.sol": "x\n" * 20}, llm=Llm())
+    assert kept[0]["severity"] == "info"
 
 
 def test_a_verdict_is_read_whatever_its_case():
@@ -178,3 +199,9 @@ def test_a_detector_hit_survives_a_timeout_while_a_model_claim_does_not():
         assert kept[0]["refutation"]["verdict"] == "not_checked"
     finally:
         release.set()
+
+
+def test_the_prompt_says_owner_only_is_not_a_defence():
+    p = build_refute_prompt(FINDING, excerpt=None)
+    assert "NOT a defence" in p
+    assert "privileged" in p.lower()
