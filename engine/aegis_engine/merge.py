@@ -13,6 +13,26 @@ _SLITHER_SEVERITY = {
 }
 
 
+_MAX_DETECTOR_TEXT = 320
+
+
+def clean_detector_text(text: str) -> str:
+    """Make a detector's own prose fit to print in a paid report.
+
+    Slither writes multi line output with tabs and full dependency paths, for
+    example node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol#4. That
+    reads like a build log next to the written findings, so the paths are cut
+    back to the file name, the whitespace is collapsed and the text is capped.
+    """
+    import re
+
+    cleaned = re.sub(r"[\w./@-]*/([\w.-]+\.sol)", r"\1", text or "")
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > _MAX_DETECTOR_TEXT:
+        cleaned = cleaned[:_MAX_DETECTOR_TEXT].rstrip() + " ..."
+    return cleaned
+
+
 def slither_as_findings(slither: list[dict]) -> list[dict]:
     out = []
     for hit in slither:
@@ -22,7 +42,7 @@ def slither_as_findings(slither: list[dict]) -> list[dict]:
             "title": check.replace("-", " "),
             "location": f"{hit.get('file', 'Target.sol')}:{hit.get('line', 0)}",
             "category": "static_analysis",
-            "description": (hit.get("description") or "").strip(),
+            "description": clean_detector_text(hit.get("description") or ""),
             "impact": "",
             "exploit_scenario": "",
             "recommendation": "",

@@ -235,3 +235,26 @@ def test_leading_zeros_in_the_line_number_also_merge():
     out = merge_findings([a, b])
     assert len(out) == 1
     assert sorted(out[0]["provenance"]) == ["lens:access_control", "lens:erc20_rug"]
+
+
+from aegis_engine.merge import clean_detector_text
+
+
+def test_detector_text_loses_dependency_paths_and_line_noise():
+    raw = ("Contract OptimismMintableERC20 (contracts/universal/OptimismMintableERC20.sol#20-118) "
+           "inherits node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol#4\n\tand "
+           "node_modules/@openzeppelin/contracts/utils/Context.sol#4")
+    out = clean_detector_text(raw)
+    assert "node_modules" not in out
+    assert "ERC20.sol#4" in out
+    assert "\n" not in out and "\t" not in out
+
+
+def test_detector_text_is_capped_but_says_it_was_cut():
+    out = clean_detector_text("word " * 400)
+    assert len(out) < 400
+    assert out.endswith("...")
+
+
+def test_clean_text_survives_an_empty_description():
+    assert clean_detector_text("") == ""
