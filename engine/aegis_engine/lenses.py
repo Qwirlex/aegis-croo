@@ -139,7 +139,12 @@ def _parse(lens: Lens, raw: str) -> list[dict]:
         line_part = loc.rpartition(":")[2].strip()
         if not line_part.isdigit():
             continue  # grounding rule, a colon with no real line number is not a finding
-        severity = f.get("severity", "info")
+        # A model very often answers "Critical" or "HIGH" rather than the
+        # lowercase form the checklist shows, so the case is normalized before
+        # the membership check. Clamping the raw, un-normalized value would
+        # silently drop a genuine critical to info, weight 0, which is worse
+        # than not clamping at all.
+        severity = str(f.get("severity") or "info").strip().lower()
         if severity not in _ALLOWED_SEVERITIES:
             severity = "info"
         out.append({

@@ -90,6 +90,28 @@ def test_an_invalid_severity_is_clamped_to_info_not_left_raw():
     assert out.findings[0]["severity"] == "info"
 
 
+def test_a_capitalized_severity_still_counts_as_the_real_severity():
+    class CapitalizedSeverityLlm:
+        def generate(self, _):
+            return json.dumps({"findings": [
+                {"severity": "Critical", "title": "t", "location": "A.sol:5", "description": "d"},
+            ]})
+
+    out = run_lenses(lenses=LENSES[:1], source="s", inventory={}, slither=[], llm=CapitalizedSeverityLlm())
+    assert out.findings[0]["severity"] == "critical"
+
+
+def test_an_all_caps_severity_still_counts_as_the_real_severity():
+    class AllCapsSeverityLlm:
+        def generate(self, _):
+            return json.dumps({"findings": [
+                {"severity": "HIGH", "title": "t", "location": "A.sol:5", "description": "d"},
+            ]})
+
+    out = run_lenses(lenses=LENSES[:1], source="s", inventory={}, slither=[], llm=AllCapsSeverityLlm())
+    assert out.findings[0]["severity"] == "high"
+
+
 def test_a_location_with_a_colon_but_no_line_number_is_dropped():
     class NoDigitLocationLlm:
         def generate(self, _):
