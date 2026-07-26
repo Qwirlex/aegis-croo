@@ -25,6 +25,43 @@ from .static_analysis import flatten_source, run_slither as _run_slither
 # read when it was not.
 MAX_PROMPT_SOURCE_CHARS = 120_000
 
+# Paths that belong to somebody else's library. A real vulnerability in a vendored
+# file still matters and is kept, but a naming note or dead code inside a
+# dependency is noise a buyer did not pay to read.
+_DEPENDENCY_MARKERS = ("node_modules/", "@openzeppelin/", "/lib/", "forge-std/", "openzeppelin-")
+
+# How many info level notes are worth listing at all. Past this the report reads
+# like a linter dump and the real findings get lost in it.
+MAX_INFO_FINDINGS = 5
+
+
+def _is_dependency(location: str) -> bool:
+    path = location.rsplit(":", 1)[0].replace("\\", "/").lower()
+    return any(m in path for m in _DEPENDENCY_MARKERS)
+
+
+def trim_noise(findings: list[dict]) -> tuple[list[dict], int]:
+    """Drop low value notes so the findings a buyer paid for stay readable.
+
+    Only info level entries are ever dropped. Anything low or above survives
+    wherever it lives, including inside a dependency, because a real bug in a
+    vendored file is still a real bug in the deployed code.
+    """
+    kept: list[dict] = []
+    info_kept = 0
+    dropped = 0
+    for f in findings:
+        if f.get("severity") != "info":
+            kept.append(f)
+            continue
+        if _is_dependency(f.get("location", "")) or info_kept >= MAX_INFO_FINDINGS:
+            dropped += 1
+            continue
+        info_kept += 1
+        kept.append(f)
+    return kept, dropped
+
+
 NOT_CHECKED = [
     "runtime behaviour, nothing was executed or simulated",
     "formal invariants and property proofs",
@@ -128,8 +165,14 @@ def _as_finding(d: dict, files: dict[str, str]) -> Finding:
     )
 
 
-def _coverage_notes(prepared: Prepared, extra: list[str] | None = None) -> list[str]:
+def _coverage_notes(prepared: Prepared, extra: list[str] | None = None,
+                    trimmed: int = 0) -> list[str]:
     notes = list(NOT_CHECKED)
+    if trimmed:
+        notes.append(
+            f"{trimmed} informational notes were left out, they were style checks or findings "
+            "inside dependency files rather than in the contract you asked about"
+        )
     if prepared.truncated_chars:
         notes.append(
             f"the contract was too large to read in full, {prepared.truncated_chars} characters "
@@ -167,7 +210,8 @@ def run_deep_audit(prepared: Prepared, *, llm=None, summarize=None,
     # Ids are stamped once, here, after the set is final. merge_findings does not
     # assign them, since it runs twice per audit and an id must not shift under a
     # reader who is looking at it.
-    kept = assign_ids(merge_findings(kept))
+    kept, trimmed = trim_noise(merge_findings(kept))
+    kept = assign_ids(kept)
     after = len([f for f in kept if f.get("severity") != "info"])
     refuted_share = 0.0 if before == 0 else (before - after) / before
 
@@ -191,7 +235,7 @@ def run_deep_audit(prepared: Prepared, *, llm=None, summarize=None,
         privileged_powers=[PrivilegedPower(**p) for p in prepared.inventory["privileged_powers"]],
         coverage=Coverage(lenses_run=lens_run.lenses_run, lenses_skipped=lens_run.lenses_skipped,
                           dropped=lens_run.dropped, detectors_run=len(prepared.slither),
-                          not_checked=_coverage_notes(prepared)),
+                          not_checked=_coverage_notes(prepared, trimmed=trimmed)),
         duration_ms=int((time.time() - started) * 1000),
     )
     if degraded:
@@ -221,7 +265,8 @@ def run_quick_scan(prepared: Prepared, *, llm=None, signing_key: str | None = No
         summary = "The reasoning pass was unavailable, so this is the static analysis result only."
         skipped = [{"lens": "triage", "reason": str(e)[:200]}]
 
-    merged = assign_ids(merge_findings(raw))[:5]
+    merged, trimmed = trim_noise(merge_findings(raw))
+    merged = assign_ids(merged)[:5]
     score = risk_score(merged)
     report = Report.build_v2(
         tier="scan", target_address=prepared.address, chain=prepared.chain,
@@ -237,7 +282,7 @@ def run_quick_scan(prepared: Prepared, *, llm=None, signing_key: str | None = No
                               "the refutation pass, that is in the full audit",
                               "exploit scenarios, they are in the full audit",
                               "the five deeper lenses, they are in the full audit",
-                          ])),
+                          ], trimmed=trimmed)),
         duration_ms=int((time.time() - started) * 1000),
     )
     return _signed(report, signing_key)

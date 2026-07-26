@@ -203,3 +203,36 @@ def test_quick_scan_falls_back_to_static_analysis_when_the_model_fails():
     assert r.confidence == "low"
     assert r.findings  # the slither hit still ships
     assert r.coverage.lenses_run == []
+
+
+from aegis_engine.deep_audit import MAX_INFO_FINDINGS, trim_noise
+
+
+def test_dependency_notes_are_trimmed_but_real_findings_are_not():
+    findings = [
+        {"severity": "info", "location": "node_modules/@openzeppelin/contracts/utils/Context.sol:21"},
+        {"severity": "info", "location": "contracts/Vault.sol:12"},
+        {"severity": "high", "location": "node_modules/@openzeppelin/contracts/token/ERC20.sol:44"},
+    ]
+    kept, dropped = trim_noise(findings)
+    assert dropped == 1
+    assert [f["location"] for f in kept] == [
+        "contracts/Vault.sol:12",
+        "node_modules/@openzeppelin/contracts/token/ERC20.sol:44",
+    ]
+
+
+def test_the_info_tail_is_capped_so_a_report_is_not_a_linter_dump():
+    findings = [{"severity": "info", "location": f"contracts/A.sol:{i}"} for i in range(20)]
+    kept, dropped = trim_noise(findings)
+    assert len(kept) == MAX_INFO_FINDINGS
+    assert dropped == 20 - MAX_INFO_FINDINGS
+
+
+def test_trimming_is_recorded_in_the_coverage_so_it_is_not_hidden():
+    llm = LensThenRefuteLlm([])
+    noisy = [{"check": "naming-convention", "impact": "Informational", "description": "d",
+              "line": i, "file": "node_modules/x/A.sol"} for i in range(4)]
+    r = run_deep_audit(_prepared(hits=noisy), llm=llm, summarize=lambda **kw: "s", signing_key="")
+    assert all("node_modules" not in f.location for f in r.findings)
+    assert any("informational notes were left out" in n for n in r.coverage.not_checked)
