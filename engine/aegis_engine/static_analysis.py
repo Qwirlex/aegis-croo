@@ -46,6 +46,10 @@ def _to_standard_json(source: str) -> dict | None:
     Solc-json platform, or None for a plain source. This is what lets
     multi-file verified contracts (DAI, USDC, anything OpenZeppelin based)
     compile instead of failing with "Expected pragma" on a raw ``{{``.
+
+    sources.py also imports this function to split a source blob by path for
+    finding excerpts, so a change to this return shape must be checked against
+    both call sites, not just the one in this file.
     """
     s = source.strip()
     if not s.startswith("{"):
