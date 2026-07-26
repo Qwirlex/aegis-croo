@@ -43,6 +43,14 @@ SLITHER:
 # as_completed budget in lenses.py is the other one and does not depend on it.
 _DEFAULT_TIMEOUT_MS = int(os.environ.get("AEGIS_LLM_TIMEOUT_MS", "60000"))
 
+# Three runs of the same verified contract produced three different reports,
+# one high finding, then two, then one again, all of them real. For a paid audit
+# that is a problem on its own: two buyers asking about the same contract should
+# not get different answers. A near zero temperature does not make the pipeline
+# deterministic, the model is still free to phrase things differently, but it
+# removes the sampling spread that was the loudest part of the difference.
+_TEMPERATURE = float(os.environ.get("AEGIS_LLM_TEMPERATURE", "0"))
+
 
 class GeminiClient:
     """Gemini via Vertex AI, authenticated with Application Default Credentials (ADC).
@@ -63,7 +71,8 @@ class GeminiClient:
         from google.genai import types
 
         config = types.GenerateContentConfig(
-            http_options=types.HttpOptions(timeout=_DEFAULT_TIMEOUT_MS)
+            http_options=types.HttpOptions(timeout=_DEFAULT_TIMEOUT_MS),
+            temperature=_TEMPERATURE,
         )
         resp = self._client.models.generate_content(
             model=self._model, contents=prompt, config=config
