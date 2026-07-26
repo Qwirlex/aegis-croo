@@ -25,7 +25,7 @@ export default function AuditView({ report, id }: { report: AuditReport; id: str
   const tierLabel = report.tier === "scan" ? "quick scan" : "full audit";
 
   return (
-    <main className="min-h-screen bg-[#0d1117] text-[#e6edf3]">
+    <main className="audit-report min-h-screen bg-[#0d1117] text-[#e6edf3]">
       <div className="mx-auto max-w-3xl px-5 py-10">
         <div className={`rounded-xl border p-5 ${v.tone}`}>
           <div className="flex flex-wrap items-baseline gap-3">

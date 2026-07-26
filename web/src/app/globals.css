@@ -43,3 +43,50 @@ body {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.6s ease;
 }
+
+/* An audit is forwarded. A buyer sends it to a founder, a founder sends it to
+   an investor, and somewhere along that chain it gets printed or saved as a
+   PDF. On paper the dark theme turns into a black page that eats ink and
+   hides the code, so printing gets its own plain treatment: white page, black
+   text, visible borders, and the highlighted line kept as a light band rather
+   than a colour wash. */
+@media print {
+  .audit-report,
+  .audit-report * {
+    background: #ffffff !important;
+    color: #111111 !important;
+    box-shadow: none !important;
+  }
+
+  .audit-report [class*="border"] {
+    border-color: #cccccc !important;
+  }
+
+  .audit-report pre,
+  .audit-report code {
+    color: #111111 !important;
+  }
+
+  /* The offending line still has to stand out on paper. */
+  .audit-report pre > div[class*="bg-yellow"] {
+    background: #f2f2f2 !important;
+    border-left: 3px solid #111111 !important;
+    font-weight: 600;
+  }
+
+  /* Keep a finding and its code on one page where the paper allows it. */
+  .audit-report article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #cccccc !important;
+    margin-bottom: 12px;
+  }
+
+  .audit-report table {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+}
