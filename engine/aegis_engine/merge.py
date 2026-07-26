@@ -31,10 +31,16 @@ def slither_as_findings(slither: list[dict]) -> list[dict]:
     return out
 
 
-def _key(f: dict) -> tuple[str, str]:
+def _key(f: dict) -> tuple[str, str | int]:
     loc = f.get("location", "")
     file, _, line = loc.rpartition(":")
-    return (file.rsplit("/", 1)[-1].lower(), line)
+    line = line.strip()
+    normalized_line: str | int
+    try:
+        normalized_line = int(line)
+    except ValueError:
+        normalized_line = line
+    return (file.rsplit("/", 1)[-1].lower(), normalized_line)
 
 
 def merge_findings(findings: list[dict]) -> list[dict]:
@@ -44,7 +50,7 @@ def merge_findings(findings: list[dict]) -> list[dict]:
     kept, so the report can show that two independent lenses agreed. Agreement is
     the strongest signal we can give a buyer without running the code.
     """
-    best: dict[tuple[str, str], dict] = {}
+    best: dict[tuple[str, str | int], dict] = {}
     for f in findings:
         k = _key(f)
         cur = best.get(k)

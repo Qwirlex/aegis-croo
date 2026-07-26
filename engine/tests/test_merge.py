@@ -124,13 +124,55 @@ def test_slither_hit_with_missing_or_unrecognized_impact_falls_back_to_info():
 
 def test_output_order_is_deterministic_regardless_of_input_order():
     # A buyer comparing two runs of a report over the same contract should
-    # never see findings shuffle. Two same severity findings at different
-    # locations sort by location text, and that text is unique per output
-    # finding by construction, since anything that would collide on location
-    # is already folded into one entry before the sort runs. So the final
-    # order does not depend on the order findings were supplied in.
+    # never see findings shuffle. Two same severity findings at genuinely
+    # different locations sort by location text, and that ordering does not
+    # depend on the order findings were supplied in. This is not a claim that
+    # every raw-text variant of "the same real line" is caught before the
+    # sort runs in general, only that whatever _key does normalize, basename
+    # case and, since the whitespace and leading zero fix, the line number,
+    # is guaranteed to fold together first. A formatting difference _key does
+    # not normalize could still reach the sort as two separate entries.
     a = {"severity": "high", "title": "a", "location": "A.sol:20", "provenance": ["lens:a"]}
     b = {"severity": "high", "title": "b", "location": "A.sol:5", "provenance": ["lens:b"]}
     forward = merge_findings([a, b])
     backward = merge_findings([b, a])
     assert [f["location"] for f in forward] == [f["location"] for f in backward] == ["A.sol:20", "A.sol:5"]
+
+
+def test_interior_whitespace_after_the_colon_still_merges():
+    # Lens output is only stripped at its outer edges before it reaches
+    # merge_findings, so "A.sol:12" and "A.sol: 12" are a plausible pair of
+    # formatting variants two lenses could produce for the same real line.
+    # Before this normalization, rpartition kept the leading space as part of
+    # the line, so the two never merged and a paid report would show the same
+    # defect twice.
+    a = {"severity": "medium", "title": "Owner can mint", "location": "A.sol:12",
+         "provenance": ["lens:access_control"]}
+    b = {"severity": "high", "title": "Unbounded mint", "location": "A.sol: 12",
+         "provenance": ["lens:erc20_rug"]}
+    out = merge_findings([a, b])
+    assert len(out) == 1
+    assert sorted(out[0]["provenance"]) == ["lens:access_control", "lens:erc20_rug"]
+
+
+def test_location_with_trailing_whitespace_merges_with_its_clean_twin():
+    a = {"severity": "medium", "title": "Owner can mint", "location": "A.sol:12",
+         "provenance": ["lens:access_control"]}
+    b = {"severity": "high", "title": "Unbounded mint", "location": "A.sol:12 ",
+         "provenance": ["lens:erc20_rug"]}
+    out = merge_findings([a, b])
+    assert len(out) == 1
+    assert sorted(out[0]["provenance"]) == ["lens:access_control", "lens:erc20_rug"]
+
+
+def test_leading_zeros_in_the_line_number_also_merge():
+    # The fix normalizes the line part to an integer when it parses as one,
+    # so "12" and "012" agree the same way two differently zero padded
+    # reports of the same line should.
+    a = {"severity": "medium", "title": "Owner can mint", "location": "A.sol:012",
+         "provenance": ["lens:access_control"]}
+    b = {"severity": "high", "title": "Unbounded mint", "location": "A.sol:12",
+         "provenance": ["lens:erc20_rug"]}
+    out = merge_findings([a, b])
+    assert len(out) == 1
+    assert sorted(out[0]["provenance"]) == ["lens:access_control", "lens:erc20_rug"]
