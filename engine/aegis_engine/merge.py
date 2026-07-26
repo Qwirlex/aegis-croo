@@ -33,6 +33,21 @@ def clean_detector_text(text: str) -> str:
     return cleaned
 
 
+def clean_location_path(path: str) -> str:
+    """Hide the working directory crytic fetches a verified contract into.
+
+    A location like crytic-export/etherscan-contracts/0x4200...base-WETH9.sol
+    tells a buyer nothing except that we shell out to a tool. The contract file
+    name is what they can actually look up, so that is what the report shows.
+    """
+    import re
+
+    if "crytic-export" not in path:
+        return path
+    name = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return re.sub(r"^0x[0-9a-fA-F]{40}[a-z.]*-", "", name)
+
+
 def slither_as_findings(slither: list[dict]) -> list[dict]:
     out = []
     for hit in slither:
@@ -40,7 +55,7 @@ def slither_as_findings(slither: list[dict]) -> list[dict]:
         out.append({
             "severity": _SLITHER_SEVERITY.get(hit.get("impact", "Informational"), "info"),
             "title": check.replace("-", " "),
-            "location": f"{hit.get('file', 'Target.sol')}:{hit.get('line', 0)}",
+            "location": f"{clean_location_path(hit.get('file', 'Target.sol'))}:{hit.get('line', 0)}",
             "category": "static_analysis",
             "description": clean_detector_text(hit.get("description") or ""),
             "impact": "",
@@ -167,10 +182,13 @@ def merge_findings(findings: list[dict]) -> list[dict]:
             groups[root] = {
                 "provenance": list(f.get("provenance", [])),
                 "also_flagged": list(f.get("also_flagged", [])),
+                "settled": [f] if f.get("refutation") else [],
                 "best": f,
             }
             continue
         g["provenance"] = list(dict.fromkeys(g["provenance"] + list(f.get("provenance", []))))
+        if f.get("refutation"):
+            g["settled"].append(f)
         if _RANK.get(f.get("severity", "info"), 1) > _RANK.get(g["best"].get("severity", "info"), 1):
             _demote(g, g["best"])
             g["best"] = f
@@ -181,10 +199,22 @@ def merge_findings(findings: list[dict]) -> list[dict]:
         groups.values(),
         key=lambda g: (-_RANK.get(g["best"].get("severity", "info"), 1), g["best"].get("location", "")),
     )
-    return [
-        {**g["best"], "provenance": g["provenance"], "also_flagged": g["also_flagged"]}
-        for g in ordered
-    ]
+    out = []
+    for g in ordered:
+        merged = {**g["best"], "provenance": g["provenance"], "also_flagged": g["also_flagged"]}
+        # A verdict that was already settled must survive the merge. A privileged
+        # power read straight out of the code carries not_checked because it is a
+        # fact rather than a claim, and losing that on a tie sent the merged
+        # entry back to the skeptic, which then deleted the fact along with the
+        # claim. A paid buyer got a weaker report than a free test run because
+        # of exactly this, so the settled verdict wins over having none.
+        if not merged.get("refutation"):
+            for variant in (g["best"], *g.get("settled", [])):
+                if variant.get("refutation"):
+                    merged["refutation"] = variant["refutation"]
+                    break
+        out.append(merged)
+    return out
 
 
 def assign_ids(findings: list[dict]) -> list[dict]:

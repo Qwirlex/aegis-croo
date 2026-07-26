@@ -258,3 +258,42 @@ def test_detector_text_is_capped_but_says_it_was_cut():
 
 def test_clean_text_survives_an_empty_description():
     assert clean_detector_text("") == ""
+
+
+def test_a_settled_verdict_survives_a_merge_with_an_unsettled_claim():
+    fact = {"severity": "high", "title": "A privileged caller can mint new supply through mint",
+            "location": "A.sol:76", "category": "privileged_power",
+            "provenance": ["inventory:privileged_power"],
+            "refutation": {"verdict": "not_checked", "reason": "read directly from the code"}}
+    claim = {"severity": "high", "title": "Unbounded minting", "location": "A.sol:76",
+             "category": "access_control", "provenance": ["lens:access_control"]}
+    for order in ([fact, claim], [claim, fact]):
+        out = merge_findings(order)
+        assert len(out) == 1
+        assert out[0]["refutation"]["verdict"] == "not_checked"
+        assert sorted(out[0]["provenance"]) == ["inventory:privileged_power", "lens:access_control"]
+
+
+def test_a_higher_claim_still_wins_the_wording_but_keeps_the_settled_verdict():
+    fact = {"severity": "medium", "title": "power", "location": "A.sol:5",
+            "provenance": ["inventory:privileged_power"],
+            "refutation": {"verdict": "not_checked", "reason": "fact"}}
+    claim = {"severity": "critical", "title": "real bug here", "location": "A.sol:5",
+             "provenance": ["lens:reentrancy_state"]}
+    out = merge_findings([fact, claim])
+    assert out[0]["title"] == "real bug here"
+    assert out[0]["severity"] == "critical"
+    assert out[0]["refutation"]["verdict"] == "not_checked"
+
+
+from aegis_engine.merge import clean_location_path
+
+
+def test_the_crytic_working_directory_is_hidden_from_a_location():
+    raw = "crytic-export/etherscan-contracts/0x4200000000000000000000000000000000000006base-WETH9.sol"
+    assert clean_location_path(raw) == "WETH9.sol"
+
+
+def test_a_real_project_path_is_left_alone():
+    p = "contracts/universal/OptimismMintableERC20.sol"
+    assert clean_location_path(p) == p
